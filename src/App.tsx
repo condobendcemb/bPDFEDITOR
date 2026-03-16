@@ -10,9 +10,10 @@ import fontkit from '@pdf-lib/fontkit';
 import { 
   Upload, Type, Trash2, Plus, Minus, 
   ChevronLeft, ChevronRight, FileText, Move,
-  Settings2, Zap, FileUp, Bold, Italic, Layers, Eraser, CheckCircle2
+  Settings2, Zap, FileUp, Bold, Italic, Layers, Eraser, CheckCircle2, X
 } from 'lucide-react';
 
+// Setup PDF.js Worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const COLOR_PRESETS = [
@@ -44,10 +45,16 @@ export default function App() {
   const onFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile?.type === 'application/pdf') {
-      setIsProcessing(true); setFile(selectedFile);
+      setIsProcessing(true);
+      setFile(selectedFile);
       const pdf = await pdfjsLib.getDocument({ data: await selectedFile.arrayBuffer() }).promise;
-      setPdfDoc(pdf); setNumPages(pdf.numPages); setCurrentPage(1);
-      setAnnotations([]); setSelectedIds([]); setScannedPages(new Set()); setIsProcessing(false);
+      setPdfDoc(pdf);
+      setNumPages(pdf.numPages);
+      setCurrentPage(1);
+      setAnnotations([]);
+      setSelectedIds([]);
+      setScannedPages(new Set());
+      setIsProcessing(false);
     }
   };
 
@@ -74,7 +81,8 @@ export default function App() {
             x, y,
             content: item.str, 
             fontSize: fontSize,
-            pageIndex: currentPage - 1, fontFamily: FONTS[0].value,
+            pageIndex: currentPage - 1,
+            fontFamily: FONTS[0].value,
             bgColor: COLOR_PRESETS[0].value,
             bold: false, italic: false,
           });
@@ -87,6 +95,13 @@ export default function App() {
 
   const handlePageClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.annotation-node')) return;
+    
+    // หากมีการเลือกอยู่แล้ว ให้ยกเลิกการเลือกแทนการสร้างใหม่ (Deselect)
+    if (selectedIds.length > 0) {
+      setSelectedIds([]);
+      return;
+    }
+
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -143,12 +158,14 @@ export default function App() {
       }
       const link = document.createElement('a');
       link.href = URL.createObjectURL(new Blob([await pdfLibDoc.save()], { type: 'application/pdf' }));
-      link.download = `EXPORT_${file.name}`; link.click();
+      link.download = `EDITED_${file.name}`;
+      link.click();
     } catch (e) { alert("Download error"); } finally { setIsProcessing(false); }
   };
 
   return (
     <div className="h-screen bg-slate-100 flex flex-col overflow-hidden font-sans text-slate-900">
+      {/* HEADER */}
       <header className="h-14 bg-white border-b flex items-center justify-between px-6 z-50 shadow-sm shrink-0">
         <div className="flex items-center gap-6">
           <div className="font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter text-lg italic"><FileText /> PDF EDITOR</div>
@@ -174,17 +191,31 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
+        {/* LEFT TOOLBAR */}
         {file && (
           <aside className="w-16 bg-white border-r flex flex-col items-center py-8 gap-5 z-40 shadow-sm">
-            <button onClick={scanFullPage} disabled={isProcessing || scannedPages.has(currentPage)} className={`p-3.5 rounded-2xl transition-all shadow-sm border ${scannedPages.has(currentPage) ? "text-slate-300 bg-slate-50 border-slate-100" : "text-blue-500 hover:bg-blue-50 border-blue-100 active:scale-90"}`}>
+            <button onClick={scanFullPage} title="Scan All Text" disabled={isProcessing || scannedPages.has(currentPage)} className={`p-3.5 rounded-2xl transition-all shadow-sm border ${scannedPages.has(currentPage) ? "text-slate-300 bg-slate-50 border-slate-100" : "text-blue-500 hover:bg-blue-50 border-blue-100 active:scale-90"}`}>
               {scannedPages.has(currentPage) ? <CheckCircle2 size={24}/> : <Zap size={24}/>}
             </button>
             <div className="w-8 border-b border-slate-100" />
-            <button onClick={() => setSelectedIds(annotations.filter(a => a.pageIndex === currentPage - 1).map(a => a.id))} className="p-3.5 rounded-2xl text-slate-400 hover:bg-slate-50"><Layers size={24}/></button>
-            <button onClick={() => { if(confirm("Clear page?")) { setAnnotations(prev => prev.filter(a => a.pageIndex !== currentPage - 1)); setScannedPages(prev => { const n = new Set(prev); n.delete(currentPage); return n; }); } }} className="p-3.5 rounded-2xl text-red-400 hover:bg-red-50"><Eraser size={24}/></button>
+            <button 
+              onClick={() => setSelectedIds(annotations.filter(a => a.pageIndex === currentPage - 1).map(a => a.id))} 
+              title="Select All on Page"
+              className="p-3.5 rounded-2xl text-slate-400 hover:bg-slate-50 transition-colors"
+            >
+              <Layers size={24}/>
+            </button>
+            <button 
+              onClick={() => { if(confirm("Clear all text on this page?")) { setAnnotations(prev => prev.filter(a => a.pageIndex !== currentPage - 1)); setScannedPages(prev => { const n = new Set(prev); n.delete(currentPage); return n; }); setSelectedIds([]); } }} 
+              title="Delete All on Page"
+              className="p-3.5 rounded-2xl text-red-400 hover:bg-red-50 transition-colors"
+            >
+              <Eraser size={24}/>
+            </button>
           </aside>
         )}
 
+        {/* MAIN VIEWPORT */}
         <main className="flex-1 overflow-auto bg-slate-200 p-10 flex flex-col items-center relative">
           {!file ? (
              <label className="m-auto bg-white p-24 rounded-[3rem] shadow-2xl border-4 border-dashed border-slate-200 flex flex-col items-center cursor-pointer hover:border-red-400 group transition-all">
@@ -208,11 +239,17 @@ export default function App() {
           )}
         </main>
 
+        {/* RIGHT SIDEBAR (PROPERTIES) */}
         {file && (
           <aside className="w-80 bg-white border-l flex flex-col shadow-2xl z-50 p-6 overflow-y-auto">
-            <div className="flex items-center gap-2 font-black text-[10px] text-red-600 uppercase tracking-widest mb-6 border-b pb-4"><Settings2 size={16}/> PROPERTIES</div>
+            <div className="flex items-center justify-between border-b pb-4 mb-6">
+              <div className="flex items-center gap-2 font-black text-[10px] text-red-600 uppercase tracking-widest"><Settings2 size={16}/> PROPERTIES</div>
+              {selectedIds.length > 0 && (
+                <button onClick={() => setSelectedIds([])} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+              )}
+            </div>
+            
             <div className={`space-y-6 ${selectedIds.length === 0 ? "opacity-30 pointer-events-none" : ""}`}>
-              {/* Typography Group - ห้ามตัดเด็ดขาด */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase">Typography</label>
                 <div className="flex gap-2">
@@ -244,12 +281,19 @@ export default function App() {
                   <textarea value={activeAnns[0]?.content || ""} onChange={(e) => updateSelected({ content: e.target.value })} className="w-full p-4 bg-slate-50 border rounded-2xl text-sm min-h-[120px] outline-none font-medium" />
                 </div>
               )}
-              <button onClick={() => { setAnnotations(prev => prev.filter(a => !selectedIds.includes(a.id))); setSelectedIds([]); }} className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest">Remove Selected</button>
+              
+              <button 
+                onClick={() => { setAnnotations(prev => prev.filter(a => !selectedIds.includes(a.id))); setSelectedIds([]); }} 
+                className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-colors"
+              >
+                Remove Selected ({selectedIds.length})
+              </button>
             </div>
           </aside>
         )}
       </div>
 
+      {/* ZOOM CONTROLS */}
       {file && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-5 py-2.5 rounded-2xl shadow-2xl border flex items-center gap-6 z-50">
           <button onClick={() => setScale(s => Math.max(0.1, s - 0.1))} className="p-1 hover:bg-slate-100 rounded-lg"><Minus size={18}/></button>
@@ -283,22 +327,17 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
 
   useEffect(() => { if (selected) inputRef.current?.focus(); }, [selected]);
 
-  // --- จุดสำคัญ: แก้ไขการคำนวณความกว้างที่ทำให้ตัวหนังสือท้ายหาย ---
+  // Handle dynamic text width/height
   useEffect(() => {
     const el = inputRef.current;
     if (el) {
       el.style.width = '10px'; 
       el.style.height = 'auto';
-      
-      // สั่งให้ Browser Re-flow ด้วยการอ่านค่า scrollWidth
-      const scrollWidth = el.scrollWidth;
-      
-      // เพิ่ม Buffer พิเศษ 15% ของขนาดฟอนต์ เพื่อป้องกันตัวหนังสือท้ายถูกตัดตอนเปลี่ยนฟอนต์
-      const buffer = annotation.fontSize * 0.3; 
-      el.style.width = `${scrollWidth + buffer}px`;
+      const buffer = annotation.fontSize * 0.4; 
+      el.style.width = `${el.scrollWidth + buffer}px`;
       el.style.height = `${el.scrollHeight}px`;
     }
-  }, [annotation.content, annotation.fontSize, annotation.bold, annotation.fontFamily]); // เพิ่ม fontFamily ใน Dependency
+  }, [annotation.content, annotation.fontSize, annotation.bold, annotation.fontFamily]);
 
   useEffect(() => {
     const handleMove = (e: MouseEvent) => {
@@ -322,7 +361,7 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
       style={{ left: `${annotation.x * 100}%`, top: `${annotation.y * 100}%`, zIndex: selected ? 100 : 10 }}
     >
       {selected && (
-        <div onMouseDown={(e) => { e.stopPropagation(); setDragStart({ x: e.clientX, y: e.clientY }); }} className="absolute -left-10 p-2 bg-red-600 text-white rounded-xl cursor-move shadow-xl z-50">
+        <div onMouseDown={(e) => { e.stopPropagation(); setDragStart({ x: e.clientX, y: e.clientY }); }} className="absolute -left-10 p-2 bg-red-600 text-white rounded-xl cursor-move shadow-xl z-50 active:scale-95 transition-transform">
           <Move size={16} />
         </div>
       )}
@@ -335,7 +374,7 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
           onChange={(e) => onUpdate({ content: e.target.value })}
           onBlur={() => annotation.content.trim() === "" && !selected && onDelete()}
           className="bg-transparent outline-none border-none p-0 m-0 resize-none overflow-hidden block placeholder-slate-300"
-          placeholder={selected ? "..." : ""}
+          placeholder={selected ? "Type here..." : ""}
           style={{ 
             display: 'block',
             whiteSpace: 'pre',
@@ -346,7 +385,7 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
             color: 'black', 
             lineHeight: '1.2',
             minWidth: '1ch',
-            paddingRight: '2px' // เผื่อที่ให้ Cursor เล็กน้อย
+            paddingRight: '4px'
           } as React.CSSProperties}
         />
       </div>
