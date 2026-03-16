@@ -193,29 +193,41 @@ export default function App() {
 
   return (
     <div className="h-screen bg-slate-100 flex flex-col overflow-hidden font-sans text-slate-900">
-      <header className="h-14 bg-white border-b flex items-center justify-between px-6 z-50 shadow-sm shrink-0">
-        <div className="flex items-center gap-6">
-          <div className="font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter text-lg italic"><FileText /> PDF EDITOR</div>
-          {file && (
-            <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer text-xs font-bold border transition-all">
-              <FileUp size={16} /> <span>OPEN NEW</span>
-              <input type="file" className="hidden" accept="application/pdf" onChange={onFileChange} />
-            </label>
-          )}
-        </div>
-        {file && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center bg-slate-100 rounded-lg p-1 border text-xs font-bold">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-1 hover:text-red-600"><ChevronLeft size={18} /></button>
-              <span className="px-4">{currentPage} / {numPages}</span>
-              <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} className="p-1 hover:text-red-600"><ChevronRight size={18} /></button>
-            </div>
-            <button onClick={handleDownload} disabled={isProcessing} className="bg-red-600 text-white px-5 py-2 rounded-xl font-bold text-xs hover:bg-red-700 shadow-md">
-              {isProcessing ? 'SAVING...' : 'EXPORT PDF'}
-            </button>
-          </div>
-        )}
-      </header>
+     {/* HEADER */}
+<header className="h-14 bg-white border-b flex items-center justify-between px-6 z-50 shadow-sm shrink-0">
+  <div className="flex items-center gap-6">
+    <div className="flex items-center gap-3">
+      <div className="font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter text-lg italic">
+        <FileText /> PDF EDITOR
+      </div>
+      {/* Version Tag ที่ย้ายมาฝั่งซ้าย */}
+      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md border border-slate-200">
+        v2.0.2
+      </span>
+    </div>
+    
+    {file && (
+      <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer text-xs font-bold border transition-all">
+        <FileUp size={16} /> <span>OPEN NEW</span>
+        <input type="file" className="hidden" accept="application/pdf" onChange={onFileChange} />
+      </label>
+    )}
+  </div>
+
+  {/* ฝั่งขวาคงเดิม (Pagination + Export) */}
+  {file && (
+    <div className="flex items-center gap-4">
+      <div className="flex items-center bg-slate-100 rounded-lg p-1 border text-xs font-bold">
+        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-1 hover:text-red-600"><ChevronLeft size={18} /></button>
+        <span className="px-4">{currentPage} / {numPages}</span>
+        <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} className="p-1 hover:text-red-600"><ChevronRight size={18} /></button>
+      </div>
+      <button onClick={handleDownload} disabled={isProcessing} className="bg-red-600 text-white px-5 py-2 rounded-xl font-bold text-xs hover:bg-red-700 shadow-md transition-all active:scale-95">
+        {isProcessing ? 'SAVING...' : 'EXPORT PDF'}
+      </button>
+    </div>
+  )}
+</header>
 
       <div className="flex flex-1 overflow-hidden">
         {file && (
