@@ -24,9 +24,9 @@ const COLOR_PRESETS = [
 ];
 
 const FONTS = [
-  { name: 'Sarabun', value: 'sarabun' },
-  { name: 'Sans', value: 'sans-serif' },
-  { name: 'Mono', value: 'monospace' },
+  { name: 'Sarabun (ไทย)', value: 'sarabun' },
+  { name: 'Sans (Inter)', value: 'sans-serif' },
+  { name: 'Mono (Roboto)', value: 'monospace' },
 ];
 
 export default function App() {
@@ -95,8 +95,6 @@ export default function App() {
 
   const handlePageClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.annotation-node')) return;
-
-    // หากมีการเลือกอยู่แล้ว ให้ยกเลิกการเลือกแทนการสร้างใหม่ (Deselect)
     if (selectedIds.length > 0) {
       setSelectedIds([]);
       return;
@@ -129,24 +127,22 @@ export default function App() {
       const pdfLibDoc = await PDFDocument.load(await file.arrayBuffer());
       pdfLibDoc.registerFontkit(fontkit);
 
-      // สร้าง Object เพื่อเก็บ Font ที่โหลดมาแล้ว (Cache)
-      const fontCache = {};
+      const fontCache: Record<string, any> = {};
 
-      // ฟังก์ชันช่วยโหลด Font ตามชื่อที่เลือก
-      const getFont = async (fontFamily) => {
-        // ถ้าเคยโหลดแล้ว ให้ดึงจาก Cache
+      const getFont = async (fontFamily: string) => {
         if (fontCache[fontFamily]) return fontCache[fontFamily];
 
-        let fontPath = './Sarabun-Regular.ttf'; // Default
-        if (fontFamily.includes('sans-serif')) fontPath = './Inter-Regular.ttf';
-        if (fontFamily.includes('monospace')) fontPath = './RobotoMono-Regular.ttf';
+        let fontPath = './Sarabun-Regular.ttf';
+        if (fontFamily === 'sans-serif') fontPath = './Inter-Regular.ttf';
+        if (fontFamily === 'monospace') fontPath = './RobotoMono-Regular.ttf';
 
         try {
           const fontBytes = await fetch(fontPath).then(res => res.arrayBuffer());
           const embedded = await pdfLibDoc.embedFont(fontBytes);
           fontCache[fontFamily] = embedded;
           return embedded;
-        } catch {
+        } catch (err) {
+          console.warn(`Font ${fontFamily} not found, using Helvetica`);
           return await pdfLibDoc.embedFont(StandardFonts.Helvetica);
         }
       };
@@ -155,9 +151,7 @@ export default function App() {
       for (const ann of annotations) {
         if (!ann.content.trim()) continue;
 
-        // ดึง Font ให้ตรงกับที่เลือกในแต่ละ Annotation
         const currentFont = await getFont(ann.fontFamily);
-
         const page = pages[ann.pageIndex];
         const { width, height } = page.getSize();
         const lines = ann.content.split('\n');
@@ -179,13 +173,17 @@ export default function App() {
           page.drawText(line, {
             x: pdfX, y: pdfY,
             size: fSize,
-            font: currentFont, // ใช้ Font ที่ตรงกับที่เลือก
+            font: currentFont,
             color: rgb(0, 0, 0),
           });
         });
       }
 
-      // ... ส่วนบันทึกไฟล์เหมือนเดิม ...
+      const pdfBytes = await pdfLibDoc.save();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+      link.download = `EDITED_${file.name}`;
+      link.click();
     } catch (e) {
       alert("Download error");
     } finally {
@@ -195,7 +193,6 @@ export default function App() {
 
   return (
     <div className="h-screen bg-slate-100 flex flex-col overflow-hidden font-sans text-slate-900">
-      {/* HEADER */}
       <header className="h-14 bg-white border-b flex items-center justify-between px-6 z-50 shadow-sm shrink-0">
         <div className="flex items-center gap-6">
           <div className="font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter text-lg italic"><FileText /> PDF EDITOR</div>
@@ -221,7 +218,6 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* LEFT TOOLBAR */}
         {file && (
           <aside className="w-16 bg-white border-r flex flex-col items-center py-8 gap-5 z-40 shadow-sm">
             <button onClick={scanFullPage} title="Scan All Text" disabled={isProcessing || scannedPages.has(currentPage)} className={`p-3.5 rounded-2xl transition-all shadow-sm border ${scannedPages.has(currentPage) ? "text-slate-300 bg-slate-50 border-slate-100" : "text-blue-500 hover:bg-blue-50 border-blue-100 active:scale-90"}`}>
@@ -245,7 +241,6 @@ export default function App() {
           </aside>
         )}
 
-        {/* MAIN VIEWPORT */}
         <main className="flex-1 overflow-auto bg-slate-200 p-10 flex flex-col items-center relative">
           {!file ? (
             <label className="m-auto bg-white p-24 rounded-[3rem] shadow-2xl border-4 border-dashed border-slate-200 flex flex-col items-center cursor-pointer hover:border-red-400 group transition-all">
@@ -269,7 +264,6 @@ export default function App() {
           )}
         </main>
 
-        {/* RIGHT SIDEBAR (PROPERTIES) */}
         {file && (
           <aside className="w-80 bg-white border-l flex flex-col shadow-2xl z-50 p-6 overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-4 mb-6">
@@ -312,10 +306,7 @@ export default function App() {
                 </div>
               )}
 
-              <button
-                onClick={() => { setAnnotations(prev => prev.filter(a => !selectedIds.includes(a.id))); setSelectedIds([]); }}
-                className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-colors"
-              >
+              <button onClick={() => { setAnnotations(prev => prev.filter(a => !selectedIds.includes(a.id))); setSelectedIds([]); }} className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-colors">
                 Remove Selected ({selectedIds.length})
               </button>
             </div>
@@ -323,7 +314,6 @@ export default function App() {
         )}
       </div>
 
-      {/* ZOOM CONTROLS */}
       {file && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-5 py-2.5 rounded-2xl shadow-2xl border flex items-center gap-6 z-50">
           <button onClick={() => setScale(s => Math.max(0.1, s - 0.1))} className="p-1 hover:bg-slate-100 rounded-lg"><Minus size={18} /></button>
@@ -357,7 +347,6 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
 
   useEffect(() => { if (selected) inputRef.current?.focus(); }, [selected]);
 
-  // Handle dynamic text width/height
   useEffect(() => {
     const el = inputRef.current;
     if (el) {
@@ -409,7 +398,8 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
             display: 'block',
             whiteSpace: 'pre',
             fontSize: `${annotation.fontSize * 2}px`,
-            fontFamily: annotation.fontFamily,
+            fontFamily: annotation.fontFamily === 'sarabun' ? '"TH Sarabun New", sans-serif' : 
+                        annotation.fontFamily === 'monospace' ? 'ui-monospace, monospace' : 'ui-sans-serif, sans-serif',
             fontWeight: annotation.bold ? 'bold' : 'normal',
             fontStyle: annotation.italic ? 'italic' : 'normal',
             color: 'black',
