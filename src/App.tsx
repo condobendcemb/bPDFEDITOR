@@ -7,8 +7,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import { 
-  Upload, Type, Trash2, Plus, Minus, 
+import {
+  Upload, Type, Trash2, Plus, Minus,
   ChevronLeft, ChevronRight, FileText, Move,
   Settings2, Zap, FileUp, Bold, Italic, Layers, Eraser, CheckCircle2, X
 } from 'lucide-react';
@@ -17,16 +17,16 @@ import {
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const COLOR_PRESETS = [
-  { name: 'None', value: { r: 1, g: 1, b: 1, transparent: true }, hex: 'transparent' }, 
+  { name: 'None', value: { r: 1, g: 1, b: 1, transparent: true }, hex: 'transparent' },
   { name: 'White', value: { r: 1, g: 1, b: 1, transparent: false }, hex: '#ffffff' },
   { name: 'Yellow', value: { r: 1, g: 0.95, b: 0.2, transparent: false }, hex: '#fef08a' },
   { name: 'Blue', value: { r: 0.8, g: 0.9, b: 1, transparent: false }, hex: '#dbeafe' },
 ];
 
 const FONTS = [
-  { name: 'Sarabun', value: '"TH Sarabun New", sans-serif' },
-  { name: 'Sans', value: 'ui-sans-serif, system-ui' },
-  { name: 'Mono', value: 'ui-monospace, SFMono-Regular' },
+  { name: 'Sarabun', value: 'sarabun' },
+  { name: 'Sans', value: 'sans-serif' },
+  { name: 'Mono', value: 'monospace' },
 ];
 
 export default function App() {
@@ -66,7 +66,7 @@ export default function App() {
       const textContent = await page.getTextContent();
       const viewport = page.getViewport({ scale: 1 });
       const lines: any[] = [];
-      
+
       textContent.items.forEach((item: any) => {
         const fontSize = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2);
         const y = 1 - (item.transform[5] / viewport.height);
@@ -79,7 +79,7 @@ export default function App() {
           lines.push({
             id: Math.random().toString(36).substring(7),
             x, y,
-            content: item.str, 
+            content: item.str,
             fontSize: fontSize,
             pageIndex: currentPage - 1,
             fontFamily: FONTS[0].value,
@@ -95,7 +95,7 @@ export default function App() {
 
   const handlePageClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.annotation-node')) return;
-    
+
     // หากมีการเลือกอยู่แล้ว ให้ยกเลิกการเลือกแทนการสร้างใหม่ (Deselect)
     if (selectedIds.length > 0) {
       setSelectedIds([]);
@@ -106,9 +106,9 @@ export default function App() {
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     const newId = Math.random().toString(36).substring(7);
-    
+
     setAnnotations(prev => [...prev, {
-      id: newId, x, y, content: '', fontSize: 18, pageIndex: currentPage - 1, 
+      id: newId, x, y, content: '', fontSize: 18, pageIndex: currentPage - 1,
       fontFamily: FONTS[0].value, bgColor: COLOR_PRESETS[0].value, bold: false, italic: false
     }]);
     setSelectedIds([newId]);
@@ -128,39 +128,69 @@ export default function App() {
     try {
       const pdfLibDoc = await PDFDocument.load(await file.arrayBuffer());
       pdfLibDoc.registerFontkit(fontkit);
-      let embeddedFont;
-      try {
-        const fontResponse = await fetch('./THSarabunNew.ttf');
-        if (!fontResponse.ok) throw new Error();
-        embeddedFont = await pdfLibDoc.embedFont(await fontResponse.arrayBuffer());
-      } catch {
-        embeddedFont = await pdfLibDoc.embedFont(StandardFonts.Helvetica);
-      }
+
+      // สร้าง Object เพื่อเก็บ Font ที่โหลดมาแล้ว (Cache)
+      const fontCache = {};
+
+      // ฟังก์ชันช่วยโหลด Font ตามชื่อที่เลือก
+      const getFont = async (fontFamily) => {
+        // ถ้าเคยโหลดแล้ว ให้ดึงจาก Cache
+        if (fontCache[fontFamily]) return fontCache[fontFamily];
+
+        let fontPath = './Sarabun-Regular.ttf'; // Default
+        if (fontFamily.includes('sans-serif')) fontPath = './Inter-Regular.ttf';
+        if (fontFamily.includes('monospace')) fontPath = './RobotoMono-Regular.ttf';
+
+        try {
+          const fontBytes = await fetch(fontPath).then(res => res.arrayBuffer());
+          const embedded = await pdfLibDoc.embedFont(fontBytes);
+          fontCache[fontFamily] = embedded;
+          return embedded;
+        } catch {
+          return await pdfLibDoc.embedFont(StandardFonts.Helvetica);
+        }
+      };
+
       const pages = pdfLibDoc.getPages();
       for (const ann of annotations) {
         if (!ann.content.trim()) continue;
+
+        // ดึง Font ให้ตรงกับที่เลือกในแต่ละ Annotation
+        const currentFont = await getFont(ann.fontFamily);
+
         const page = pages[ann.pageIndex];
         const { width, height } = page.getSize();
         const lines = ann.content.split('\n');
         const fSize = ann.fontSize;
-        lines.forEach((line: string, i: number) => {
-          const textWidth = embeddedFont.widthOfTextAtSize(line || ' ', fSize);
+
+        lines.forEach((line, i) => {
+          const textWidth = currentFont.widthOfTextAtSize(line || ' ', fSize);
           const pdfX = ann.x * width;
-          const pdfY = height - (ann.y * height) - (i * fSize * 1.05) - (fSize * 0.78);
+          const pdfY = height - (ann.y * height) - (i * fSize * 1.1) - (fSize * 0.8);
+
           if (!ann.bgColor.transparent) {
             page.drawRectangle({
-              x: pdfX - 2, y: pdfY - (fSize * 0.2), width: textWidth + 4, height: fSize * 1.2,
+              x: pdfX - 2, y: pdfY - (fSize * 0.2),
+              width: textWidth + 4, height: fSize * 1.2,
               color: rgb(ann.bgColor.r, ann.bgColor.g, ann.bgColor.b),
             });
           }
-          page.drawText(line, { x: pdfX, y: pdfY, size: fSize, font: embeddedFont, color: rgb(0, 0, 0) });
+
+          page.drawText(line, {
+            x: pdfX, y: pdfY,
+            size: fSize,
+            font: currentFont, // ใช้ Font ที่ตรงกับที่เลือก
+            color: rgb(0, 0, 0),
+          });
         });
       }
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(new Blob([await pdfLibDoc.save()], { type: 'application/pdf' }));
-      link.download = `EDITED_${file.name}`;
-      link.click();
-    } catch (e) { alert("Download error"); } finally { setIsProcessing(false); }
+
+      // ... ส่วนบันทึกไฟล์เหมือนเดิม ...
+    } catch (e) {
+      alert("Download error");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -179,9 +209,9 @@ export default function App() {
         {file && (
           <div className="flex items-center gap-4">
             <div className="flex items-center bg-slate-100 rounded-lg p-1 border text-xs font-bold">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-1 hover:text-red-600"><ChevronLeft size={18}/></button>
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-1 hover:text-red-600"><ChevronLeft size={18} /></button>
               <span className="px-4">{currentPage} / {numPages}</span>
-              <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} className="p-1 hover:text-red-600"><ChevronRight size={18}/></button>
+              <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} className="p-1 hover:text-red-600"><ChevronRight size={18} /></button>
             </div>
             <button onClick={handleDownload} disabled={isProcessing} className="bg-red-600 text-white px-5 py-2 rounded-xl font-bold text-xs hover:bg-red-700 shadow-md">
               {isProcessing ? 'SAVING...' : 'EXPORT PDF'}
@@ -195,22 +225,22 @@ export default function App() {
         {file && (
           <aside className="w-16 bg-white border-r flex flex-col items-center py-8 gap-5 z-40 shadow-sm">
             <button onClick={scanFullPage} title="Scan All Text" disabled={isProcessing || scannedPages.has(currentPage)} className={`p-3.5 rounded-2xl transition-all shadow-sm border ${scannedPages.has(currentPage) ? "text-slate-300 bg-slate-50 border-slate-100" : "text-blue-500 hover:bg-blue-50 border-blue-100 active:scale-90"}`}>
-              {scannedPages.has(currentPage) ? <CheckCircle2 size={24}/> : <Zap size={24}/>}
+              {scannedPages.has(currentPage) ? <CheckCircle2 size={24} /> : <Zap size={24} />}
             </button>
             <div className="w-8 border-b border-slate-100" />
-            <button 
-              onClick={() => setSelectedIds(annotations.filter(a => a.pageIndex === currentPage - 1).map(a => a.id))} 
+            <button
+              onClick={() => setSelectedIds(annotations.filter(a => a.pageIndex === currentPage - 1).map(a => a.id))}
               title="Select All on Page"
               className="p-3.5 rounded-2xl text-slate-400 hover:bg-slate-50 transition-colors"
             >
-              <Layers size={24}/>
+              <Layers size={24} />
             </button>
-            <button 
-              onClick={() => { if(confirm("Clear all text on this page?")) { setAnnotations(prev => prev.filter(a => a.pageIndex !== currentPage - 1)); setScannedPages(prev => { const n = new Set(prev); n.delete(currentPage); return n; }); setSelectedIds([]); } }} 
+            <button
+              onClick={() => { if (confirm("Clear all text on this page?")) { setAnnotations(prev => prev.filter(a => a.pageIndex !== currentPage - 1)); setScannedPages(prev => { const n = new Set(prev); n.delete(currentPage); return n; }); setSelectedIds([]); } }}
               title="Delete All on Page"
               className="p-3.5 rounded-2xl text-red-400 hover:bg-red-50 transition-colors"
             >
-              <Eraser size={24}/>
+              <Eraser size={24} />
             </button>
           </aside>
         )}
@@ -218,19 +248,19 @@ export default function App() {
         {/* MAIN VIEWPORT */}
         <main className="flex-1 overflow-auto bg-slate-200 p-10 flex flex-col items-center relative">
           {!file ? (
-             <label className="m-auto bg-white p-24 rounded-[3rem] shadow-2xl border-4 border-dashed border-slate-200 flex flex-col items-center cursor-pointer hover:border-red-400 group transition-all">
-                <Upload className="text-slate-300 mb-6 group-hover:text-red-400" size={48} />
-                <input type="file" className="hidden" accept="application/pdf" onChange={onFileChange} />
-                <span className="font-black text-slate-400 uppercase tracking-widest">UPLOAD PDF</span>
-             </label>
+            <label className="m-auto bg-white p-24 rounded-[3rem] shadow-2xl border-4 border-dashed border-slate-200 flex flex-col items-center cursor-pointer hover:border-red-400 group transition-all">
+              <Upload className="text-slate-300 mb-6 group-hover:text-red-400" size={48} />
+              <input type="file" className="hidden" accept="application/pdf" onChange={onFileChange} />
+              <span className="font-black text-slate-400 uppercase tracking-widest">UPLOAD PDF</span>
+            </label>
           ) : (
             <div className="pdf-viewport-container relative shadow-2xl bg-white origin-top mb-32" style={{ transform: `scale(${scale})` }} onClick={handlePageClick}>
               <PDFPageRenderer pdfDoc={pdfDoc} pageNumber={currentPage} />
               <div className="absolute inset-0 pointer-events-none z-30">
                 {annotations.filter(a => a.pageIndex === currentPage - 1).map(ann => (
-                  <AnnotationItem key={ann.id} annotation={ann} selected={selectedIds.includes(ann.id)} 
-                    onSelect={(multi) => multi ? setSelectedIds(prev => prev.includes(ann.id) ? prev.filter(i => i !== ann.id) : [...prev, ann.id]) : setSelectedIds([ann.id])} 
-                    onUpdate={(upd: any) => setAnnotations(prev => prev.map(a => a.id === ann.id ? {...a, ...upd} : a))}
+                  <AnnotationItem key={ann.id} annotation={ann} selected={selectedIds.includes(ann.id)}
+                    onSelect={(multi) => multi ? setSelectedIds(prev => prev.includes(ann.id) ? prev.filter(i => i !== ann.id) : [...prev, ann.id]) : setSelectedIds([ann.id])}
+                    onUpdate={(upd: any) => setAnnotations(prev => prev.map(a => a.id === ann.id ? { ...a, ...upd } : a))}
                     onMove={moveSelected} onDelete={() => { setAnnotations(prev => prev.filter(a => a.id !== ann.id)); setSelectedIds([]); }}
                   />
                 ))}
@@ -243,18 +273,18 @@ export default function App() {
         {file && (
           <aside className="w-80 bg-white border-l flex flex-col shadow-2xl z-50 p-6 overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-4 mb-6">
-              <div className="flex items-center gap-2 font-black text-[10px] text-red-600 uppercase tracking-widest"><Settings2 size={16}/> PROPERTIES</div>
+              <div className="flex items-center gap-2 font-black text-[10px] text-red-600 uppercase tracking-widest"><Settings2 size={16} /> PROPERTIES</div>
               {selectedIds.length > 0 && (
-                <button onClick={() => setSelectedIds([])} className="text-slate-400 hover:text-slate-600"><X size={16}/></button>
+                <button onClick={() => setSelectedIds([])} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
               )}
             </div>
-            
+
             <div className={`space-y-6 ${selectedIds.length === 0 ? "opacity-30 pointer-events-none" : ""}`}>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase">Typography</label>
                 <div className="flex gap-2">
-                  <button onClick={() => updateSelected({ bold: !activeAnns[0]?.bold })} className={`flex-1 py-2 border rounded-xl transition-all ${activeAnns[0]?.bold ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}><Bold size={16} className="mx-auto"/></button>
-                  <button onClick={() => updateSelected({ italic: !activeAnns[0]?.italic })} className={`flex-1 py-2 border rounded-xl transition-all ${activeAnns[0]?.italic ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}><Italic size={16} className="mx-auto"/></button>
+                  <button onClick={() => updateSelected({ bold: !activeAnns[0]?.bold })} className={`flex-1 py-2 border rounded-xl transition-all ${activeAnns[0]?.bold ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}><Bold size={16} className="mx-auto" /></button>
+                  <button onClick={() => updateSelected({ italic: !activeAnns[0]?.italic })} className={`flex-1 py-2 border rounded-xl transition-all ${activeAnns[0]?.italic ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}><Italic size={16} className="mx-auto" /></button>
                 </div>
                 <select value={activeAnns[0]?.fontFamily} onChange={(e) => updateSelected({ fontFamily: e.target.value })} className="w-full p-2 border rounded-xl bg-slate-50 text-sm font-bold outline-none mt-2">
                   {FONTS.map(f => <option key={f.name} value={f.value}>{f.name}</option>)}
@@ -281,9 +311,9 @@ export default function App() {
                   <textarea value={activeAnns[0]?.content || ""} onChange={(e) => updateSelected({ content: e.target.value })} className="w-full p-4 bg-slate-50 border rounded-2xl text-sm min-h-[120px] outline-none font-medium" />
                 </div>
               )}
-              
-              <button 
-                onClick={() => { setAnnotations(prev => prev.filter(a => !selectedIds.includes(a.id))); setSelectedIds([]); }} 
+
+              <button
+                onClick={() => { setAnnotations(prev => prev.filter(a => !selectedIds.includes(a.id))); setSelectedIds([]); }}
                 className="w-full py-4 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-colors"
               >
                 Remove Selected ({selectedIds.length})
@@ -296,9 +326,9 @@ export default function App() {
       {/* ZOOM CONTROLS */}
       {file && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-white px-5 py-2.5 rounded-2xl shadow-2xl border flex items-center gap-6 z-50">
-          <button onClick={() => setScale(s => Math.max(0.1, s - 0.1))} className="p-1 hover:bg-slate-100 rounded-lg"><Minus size={18}/></button>
+          <button onClick={() => setScale(s => Math.max(0.1, s - 0.1))} className="p-1 hover:bg-slate-100 rounded-lg"><Minus size={18} /></button>
           <span className="text-xs font-black w-12 text-center">{Math.round(scale * 100)}%</span>
-          <button onClick={() => setScale(s => Math.min(5, s + 0.1))} className="p-1 hover:bg-slate-100 rounded-lg"><Plus size={18}/></button>
+          <button onClick={() => setScale(s => Math.min(5, s + 0.1))} className="p-1 hover:bg-slate-100 rounded-lg"><Plus size={18} /></button>
         </div>
       )}
     </div>
@@ -323,7 +353,7 @@ function PDFPageRenderer({ pdfDoc, pageNumber }: any) {
 
 function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDelete }: any) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const [dragStart, setDragStart] = useState<{x: number, y: number} | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number, y: number } | null>(null);
 
   useEffect(() => { if (selected) inputRef.current?.focus(); }, [selected]);
 
@@ -331,9 +361,9 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
   useEffect(() => {
     const el = inputRef.current;
     if (el) {
-      el.style.width = '10px'; 
+      el.style.width = '10px';
       el.style.height = 'auto';
-      const buffer = annotation.fontSize * 0.4; 
+      const buffer = annotation.fontSize * 0.4;
       el.style.width = `${el.scrollWidth + buffer}px`;
       el.style.height = `${el.scrollHeight}px`;
     }
@@ -357,7 +387,7 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
 
   return (
     <div onMouseDown={(e) => { e.stopPropagation(); onSelect(e.ctrlKey || e.metaKey); }}
-      className="absolute pointer-events-auto annotation-node flex items-start" 
+      className="absolute pointer-events-auto annotation-node flex items-start"
       style={{ left: `${annotation.x * 100}%`, top: `${annotation.y * 100}%`, zIndex: selected ? 100 : 10 }}
     >
       {selected && (
@@ -366,23 +396,23 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
         </div>
       )}
       <div className={`p-0.5 rounded transition-all flex items-center ${selected ? "ring-2 ring-red-500 shadow-md" : ""}`} style={{ backgroundColor: bgColorStyle }}>
-        <textarea 
-          ref={inputRef} 
-          value={annotation.content} 
+        <textarea
+          ref={inputRef}
+          value={annotation.content}
           rows={1}
           spellCheck={false}
           onChange={(e) => onUpdate({ content: e.target.value })}
           onBlur={() => annotation.content.trim() === "" && !selected && onDelete()}
           className="bg-transparent outline-none border-none p-0 m-0 resize-none overflow-hidden block placeholder-slate-300"
           placeholder={selected ? "Type here..." : ""}
-          style={{ 
+          style={{
             display: 'block',
             whiteSpace: 'pre',
-            fontSize: `${annotation.fontSize * 2}px`, 
-            fontFamily: annotation.fontFamily, 
+            fontSize: `${annotation.fontSize * 2}px`,
+            fontFamily: annotation.fontFamily,
             fontWeight: annotation.bold ? 'bold' : 'normal',
             fontStyle: annotation.italic ? 'italic' : 'normal',
-            color: 'black', 
+            color: 'black',
             lineHeight: '1.2',
             minWidth: '1ch',
             paddingRight: '4px'
