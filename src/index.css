@@ -1,1 +1,38 @@
 @import "tailwindcss";
+
+/* 1. ประกาศฟอนต์ไทย */
+@font-face {
+  font-family: 'TH Sarabun New';
+  src: url('/fonts/THSarabunNew.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Cordia New';
+  src: url('/fonts/CordiaNew.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* 2. ตั้งค่า Default สำหรับ Textarea */
+textarea {
+  tab-size: 4;
+  -moz-tab-size: 4;
+  line-height: 1.2;
+  padding-bottom: 2px; /* กันสระล่างโดนตัด */
+}
+
+/* 3. ซ่อน Scrollbar */
+textarea::-webkit-scrollbar {
+  display: none;
+}
+
+/* 4. ปรับแต่ง UI ทั่วไป */
+.pdf-viewport-container {
+  transition: transform 0.1s ease-out;
+}
+
+.annotation-node textarea::placeholder {
+  color: #cbd5e1;
+}

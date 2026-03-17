@@ -29,6 +29,14 @@ const FONTS = [
   { name: 'Mono (Roboto)', value: 'monospace' },
 ];
 
+const TEXT_COLORS = [
+  { name: 'Black', value: { r: 0, g: 0, b: 0 }, hex: '#000000' },
+  { name: 'Red', value: { r: 0.8, g: 0, b: 0 }, hex: '#ef4444' },
+  { name: 'Blue', value: { r: 0, g: 0.2, b: 0.8 }, hex: '#3b82f6' },
+  { name: 'Green', value: { r: 0, g: 0.5, b: 0 }, hex: '#22c55e' },
+];
+
+
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -39,6 +47,8 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scannedPages, setScannedPages] = useState<Set<number>>(new Set());
+  const [selectionBox, setSelectionBox] = useState<{startX: number, startY: number, endX: number, endY: number} | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
 
   const activeAnns = annotations.filter(a => selectedIds.includes(a.id));
 
@@ -68,23 +78,24 @@ export default function App() {
       const lines: any[] = [];
 
       textContent.items.forEach((item: any) => {
-        const fontSize = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2);
-        const y = 1 - (item.transform[5] / viewport.height);
+        const fontSize = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2) || 14;
+        const yTop = 1 - ((item.transform[5] + fontSize * 0.8) / viewport.height);
         const x = item.transform[4] / viewport.width;
 
-        const existingLine = lines.find(l => Math.abs(l.y - y) < 0.003);
+        const existingLine = lines.find(l => Math.abs(l.y - yTop) < 0.005);
         if (existingLine) {
           existingLine.content += (item.hasEOL ? '\n' : ' ') + item.str;
         } else {
           lines.push({
             id: Math.random().toString(36).substring(7),
-            x, y,
+            x, y: yTop,
             content: item.str,
             fontSize: fontSize,
             pageIndex: currentPage - 1,
             fontFamily: FONTS[0].value,
             bgColor: COLOR_PRESETS[0].value,
             bold: false, italic: false,
+            textColor: TEXT_COLORS[0].value,
           });
         }
       });
@@ -93,24 +104,6 @@ export default function App() {
     } catch (err) { console.error(err); } finally { setIsProcessing(false); }
   };
 
-  const handlePageClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.annotation-node')) return;
-    if (selectedIds.length > 0) {
-      setSelectedIds([]);
-      return;
-    }
-
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    const newId = Math.random().toString(36).substring(7);
-
-    setAnnotations(prev => [...prev, {
-      id: newId, x, y, content: '', fontSize: 18, pageIndex: currentPage - 1,
-      fontFamily: FONTS[0].value, bgColor: COLOR_PRESETS[0].value, bold: false, italic: false
-    }]);
-    setSelectedIds([newId]);
-  };
 
   const updateSelected = (upd: any) => {
     setAnnotations(prev => prev.map(a => selectedIds.includes(a.id) ? { ...a, ...upd } : a));
@@ -160,7 +153,7 @@ export default function App() {
         lines.forEach((line, i) => {
           const textWidth = currentFont.widthOfTextAtSize(line || ' ', fSize);
           const pdfX = ann.x * width;
-          const pdfY = height - (ann.y * height) - (i * fSize * 1.1) - (fSize * 0.8);
+          const pdfY = height - (ann.y * height) - (i * fSize * 1.2) - (fSize * 0.8);
 
           if (!ann.bgColor.transparent) {
             page.drawRectangle({
@@ -174,7 +167,7 @@ export default function App() {
             x: pdfX, y: pdfY,
             size: fSize,
             font: currentFont,
-            color: rgb(0, 0, 0),
+            color: rgb(ann.textColor.r, ann.textColor.g, ann.textColor.b),
           });
         });
       }
@@ -193,41 +186,41 @@ export default function App() {
 
   return (
     <div className="h-screen bg-slate-100 flex flex-col overflow-hidden font-sans text-slate-900">
-     {/* HEADER */}
-<header className="h-14 bg-white border-b flex items-center justify-between px-6 z-50 shadow-sm shrink-0">
-  <div className="flex items-center gap-6">
-    <div className="flex items-center gap-3">
-      <div className="font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter text-lg italic">
-        <FileText /> PDF EDITOR
-      </div>
-      {/* Version Tag ที่ย้ายมาฝั่งซ้าย */}
-      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md border border-slate-200">
-        v2.0.2
-      </span>
-    </div>
-    
-    {file && (
-      <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer text-xs font-bold border transition-all">
-        <FileUp size={16} /> <span>OPEN NEW</span>
-        <input type="file" className="hidden" accept="application/pdf" onChange={onFileChange} />
-      </label>
-    )}
-  </div>
+      {/* HEADER */}
+      <header className="h-14 bg-white border-b flex items-center justify-between px-6 z-50 shadow-sm shrink-0">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3">
+            <div className="font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter text-lg italic">
+              <FileText /> PDF EDITOR
+            </div>
+            {/* Version Tag ที่ย้ายมาฝั่งซ้าย */}
+            <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md border border-slate-200">
+              v2.0.6
+            </span>
+          </div>
 
-  {/* ฝั่งขวาคงเดิม (Pagination + Export) */}
-  {file && (
-    <div className="flex items-center gap-4">
-      <div className="flex items-center bg-slate-100 rounded-lg p-1 border text-xs font-bold">
-        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-1 hover:text-red-600"><ChevronLeft size={18} /></button>
-        <span className="px-4">{currentPage} / {numPages}</span>
-        <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} className="p-1 hover:text-red-600"><ChevronRight size={18} /></button>
-      </div>
-      <button onClick={handleDownload} disabled={isProcessing} className="bg-red-600 text-white px-5 py-2 rounded-xl font-bold text-xs hover:bg-red-700 shadow-md transition-all active:scale-95">
-        {isProcessing ? 'SAVING...' : 'EXPORT PDF'}
-      </button>
-    </div>
-  )}
-</header>
+          {file && (
+            <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer text-xs font-bold border transition-all">
+              <FileUp size={16} /> <span>OPEN NEW</span>
+              <input type="file" className="hidden" accept="application/pdf" onChange={onFileChange} />
+            </label>
+          )}
+        </div>
+
+        {/* ฝั่งขวาคงเดิม (Pagination + Export) */}
+        {file && (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center bg-slate-100 rounded-lg p-1 border text-xs font-bold">
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-1 hover:text-red-600"><ChevronLeft size={18} /></button>
+              <span className="px-4">{currentPage} / {numPages}</span>
+              <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} className="p-1 hover:text-red-600"><ChevronRight size={18} /></button>
+            </div>
+            <button onClick={handleDownload} disabled={isProcessing} className="bg-red-600 text-white px-5 py-2 rounded-xl font-bold text-xs hover:bg-red-700 shadow-md transition-all active:scale-95">
+              {isProcessing ? 'SAVING...' : 'EXPORT PDF'}
+            </button>
+          </div>
+        )}
+      </header>
 
       <div className="flex flex-1 overflow-hidden">
         {file && (
@@ -261,9 +254,109 @@ export default function App() {
               <span className="font-black text-slate-400 uppercase tracking-widest">UPLOAD PDF</span>
             </label>
           ) : (
-            <div className="pdf-viewport-container relative shadow-2xl bg-white origin-top mb-32" style={{ transform: `scale(${scale})` }} onClick={handlePageClick}>
+            <div className="pdf-viewport-container relative shadow-2xl bg-white origin-top mb-32 select-none touch-none" style={{ transform: `scale(${scale})` }}
+              onPointerDown={(e) => {
+                if ((e.target as HTMLElement).closest('.annotation-node')) return;
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const x = (e.clientX - rect.left) / rect.width;
+                const y = (e.clientY - rect.top) / rect.height;
+                setSelectionBox({ startX: x, startY: y, endX: x, endY: y });
+                setIsSelecting(true);
+              }}
+              onPointerMove={(e) => {
+                if (!isSelecting || !selectionBox) return;
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+                setSelectionBox(prev => prev ? { ...prev, endX: x, endY: y } : null);
+              }}
+              onPointerUp={async (e) => {
+                 if (!isSelecting || !selectionBox) return;
+                 setIsSelecting(false);
+                 const width = Math.abs(selectionBox.endX - selectionBox.startX);
+                 const height = Math.abs(selectionBox.endY - selectionBox.startY);
+                 
+                 setSelectionBox(null);
+                 if (width < 0.005 && height < 0.005) {
+                    if (selectedIds.length > 0) { setSelectedIds([]); return; }
+                    const newId = Math.random().toString(36).substring(7);
+                    setAnnotations(prev => [...prev, {
+                      id: newId, x: selectionBox.startX, y: selectionBox.startY, content: '', fontSize: 18, pageIndex: currentPage - 1,
+                      fontFamily: FONTS[0].value, bgColor: COLOR_PRESETS[0].value, bold: false, italic: false, textColor: TEXT_COLORS[0].value,
+                    }]);
+                    setSelectedIds([newId]);
+                    return;
+                 }
+                 
+                 const minX = Math.min(selectionBox.startX, selectionBox.endX);
+                 const maxX = Math.max(selectionBox.startX, selectionBox.endX);
+                 const minY = Math.min(selectionBox.startY, selectionBox.endY);
+                 const maxY = Math.max(selectionBox.startY, selectionBox.endY);
+                 
+                 if (!pdfDoc) return;
+                 setIsProcessing(true);
+                 try {
+                   const page = await pdfDoc.getPage(currentPage);
+                   const textContent = await page.getTextContent();
+                   const viewport = page.getViewport({ scale: 1 });
+                   
+                   const selectedItems = textContent.items.map((item: any) => {
+                      const fontSize = Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2) || 14;
+                      return {
+                        str: item.str,
+                        x: item.transform[4] / viewport.width,
+                        y: 1 - ((item.transform[5] + fontSize * 0.8) / viewport.height),
+                        hasEOL: item.hasEOL,
+                        fontSize: fontSize
+                      };
+                   }).filter((item: any) => item.x >= minX - 0.02 && item.x <= maxX + 0.02 && item.y >= minY - 0.02 && item.y <= maxY + 0.02);
+                   
+                   selectedItems.sort((a, b) => {
+                     if (Math.abs(a.y - b.y) > 0.01) return a.y - b.y;
+                     return a.x - b.x;
+                   });
+                   
+                   if (selectedItems.length > 0) {
+                     let extractedText = '';
+                     let totalFontSize = 0;
+                     selectedItems.forEach((item, index) => {
+                       extractedText += item.str;
+                       totalFontSize += item.fontSize;
+                       if (item.hasEOL || (index < selectedItems.length - 1 && Math.abs(selectedItems[index + 1].y - item.y) > 0.01)) {
+                          extractedText += '\n';
+                       } else {
+                          extractedText += ' ';
+                       }
+                     });
+                     
+                     const avgFontSize = totalFontSize / selectedItems.length;
+                     
+                     if (extractedText.trim()) {
+                       const newId = Math.random().toString(36).substring(7);
+                       setAnnotations(prev => [...prev, {
+                         id: newId, x: selectedItems[0].x, y: selectedItems[0].y, content: extractedText.trim(), fontSize: avgFontSize, pageIndex: currentPage - 1,
+                          fontFamily: FONTS[0].value, bgColor: COLOR_PRESETS[1].value, bold: false, italic: false, textColor: TEXT_COLORS[0].value,
+                       }]);
+                       setSelectedIds([newId]);
+                     }
+                   }
+                 } catch (err) {
+                   console.error("Text extraction failed", err);
+                 } finally {
+                   setIsProcessing(false);
+                 }
+              }}
+            >
               <PDFPageRenderer pdfDoc={pdfDoc} pageNumber={currentPage} />
               <div className="absolute inset-0 pointer-events-none z-30">
+                {selectionBox && (
+                  <div className="absolute bg-blue-500/20 border-2 border-blue-500 pointer-events-none" style={{
+                    left: `${Math.min(selectionBox.startX, selectionBox.endX) * 100}%`,
+                    top: `${Math.min(selectionBox.startY, selectionBox.endY) * 100}%`,
+                    width: `${Math.abs(selectionBox.endX - selectionBox.startX) * 100}%`,
+                    height: `${Math.abs(selectionBox.endY - selectionBox.startY) * 100}%`,
+                  }} />
+                )}
                 {annotations.filter(a => a.pageIndex === currentPage - 1).map(ann => (
                   <AnnotationItem key={ann.id} annotation={ann} selected={selectedIds.includes(ann.id)}
                     onSelect={(multi) => multi ? setSelectedIds(prev => prev.includes(ann.id) ? prev.filter(i => i !== ann.id) : [...prev, ann.id]) : setSelectedIds([ann.id])}
@@ -297,9 +390,41 @@ export default function App() {
                 </select>
               </div>
 
+              {/* Font Size Section */}
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase">Font Size ({Math.round(activeAnns[0]?.fontSize || 0)}px)</label>
-                <input type="range" min="4" max="150" value={activeAnns[0]?.fontSize || 14} onChange={(e) => updateSelected({ fontSize: parseInt(e.target.value) })} className="w-full accent-red-600" />
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between">
+                  <span>Font Size (px)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  {/* ช่องป้อนตัวเลข */}
+                  <input
+                    type="number"
+                    value={Math.round(activeAnns[0]?.fontSize || 14)}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val)) updateSelected({ fontSize: val });
+                    }}
+                    className="w-full p-2 bg-slate-50 border rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-red-500 transition-all"
+                    min="1"
+                    max="500"
+                  />
+
+                  {/* ปุ่มเพิ่ม/ลด ขนาดแบบรวดเร็ว */}
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => updateSelected({ fontSize: Math.max(1, (activeAnns[0]?.fontSize || 14) - 1) })}
+                      className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg border text-slate-600"
+                    >
+                      <Minus size={14} />
+                    </button>
+                    <button
+                      onClick={() => updateSelected({ fontSize: (activeAnns[0]?.fontSize || 14) + 1 })}
+                      className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg border text-slate-600"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -310,6 +435,25 @@ export default function App() {
                   ))}
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Text Color</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {TEXT_COLORS.map(c => (
+                    <button
+                      key={c.name}
+                      onClick={() => updateSelected({ textColor: c.value })}
+                      className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${JSON.stringify(activeAnns[0]?.textColor) === JSON.stringify(c.value)
+                          ? "border-red-500 scale-105" : "border-slate-100"
+                        }`}
+                      style={{ color: c.hex }}
+                    >
+                      <Type size={16} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
 
               {selectedIds.length === 1 && (
                 <div className="space-y-2">
@@ -356,6 +500,7 @@ function PDFPageRenderer({ pdfDoc, pageNumber }: any) {
 function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDelete }: any) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [dragStart, setDragStart] = useState<{ x: number, y: number } | null>(null);
+  const textColorStyle = `rgb(${annotation.textColor.r * 255}, ${annotation.textColor.g * 255}, ${annotation.textColor.b * 255})`;
 
   useEffect(() => { if (selected) inputRef.current?.focus(); }, [selected]);
 
@@ -410,14 +555,15 @@ function AnnotationItem({ annotation, selected, onSelect, onUpdate, onMove, onDe
             display: 'block',
             whiteSpace: 'pre',
             fontSize: `${annotation.fontSize * 2}px`,
-            fontFamily: annotation.fontFamily === 'sarabun' ? '"TH Sarabun New", sans-serif' : 
-                        annotation.fontFamily === 'monospace' ? 'ui-monospace, monospace' : 'ui-sans-serif, sans-serif',
+            fontFamily: annotation.fontFamily === 'sarabun' ? '"TH Sarabun New", sans-serif' :
+              annotation.fontFamily === 'monospace' ? 'ui-monospace, monospace' : 'ui-sans-serif, sans-serif',
             fontWeight: annotation.bold ? 'bold' : 'normal',
             fontStyle: annotation.italic ? 'italic' : 'normal',
-            color: 'black',
+            color: textColorStyle,
             lineHeight: '1.2',
             minWidth: '1ch',
             paddingRight: '4px'
+           
           } as React.CSSProperties}
         />
       </div>
