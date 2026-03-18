@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
-/* 1. ประกาศฟอนต์ไทย */
+:root {
+  --app-bg: #f8fafc;
+  --panel-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
+  --accent: #ef4444;
+  --accent-hover: #dc2626;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --shadow-premium: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
 @font-face {
   font-family: 'TH Sarabun New';
   src: url('/fonts/THSarabunNew.ttf') format('truetype');
@@ -9,30 +19,79 @@
 }
 
 @font-face {
-  font-family: 'Cordia New';
-  src: url('/fonts/CordiaNew.ttf') format('truetype');
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
 }
 
-/* 2. ตั้งค่า Default สำหรับ Textarea */
-textarea {
-  tab-size: 4;
-  -moz-tab-size: 4;
-  line-height: 1.2;
-  padding-bottom: 2px; /* กันสระล่างโดนตัด */
+body {
+  background-color: var(--app-bg);
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 3. ซ่อน Scrollbar */
+.glass {
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+}
+
+.glass-dark {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+textarea {
+  tab-size: 4;
+  line-height: 1.2;
+  padding-bottom: 2px;
+}
+
 textarea::-webkit-scrollbar {
   display: none;
 }
 
-/* 4. ปรับแต่ง UI ทั่วไป */
 .pdf-viewport-container {
-  transition: transform 0.1s ease-out;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-premium);
 }
 
-.annotation-node textarea::placeholder {
-  color: #cbd5e1;
+.annotation-node {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.annotation-node:hover {
+  transform: scale(1.02);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
 }
